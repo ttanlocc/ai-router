@@ -271,6 +271,9 @@ export default function KeyAccessModal({ isOpen, onClose, providerId }) {
         </div>
       </div>
 
+      {data.auto?.everyH && !data.auto?.last && (
+        <div className="text-xs text-text-muted mb-2">Auto every {data.auto.everyH}h · first run pending</div>
+      )}
       {data.auto?.last && (
         <div className="text-xs text-text-muted mb-2 flex items-center gap-2 tabular-nums">
           <span title={data.auto.last.moves.map((m) => `${keyName(m.keyId)}: ${nameOf(m.from)} → ${nameOf(m.to)}`).join("\n") || "No changes needed"}>
