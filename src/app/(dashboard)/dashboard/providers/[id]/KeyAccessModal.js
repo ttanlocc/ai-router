@@ -119,6 +119,7 @@ export default function KeyAccessModal({ isOpen, onClose, providerId }) {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const [selected, setSelected] = useState(() => new Set());
 
   // Tick reset countdowns once a minute while open
   useEffect(() => {
@@ -140,7 +141,13 @@ export default function KeyAccessModal({ isOpen, onClose, providerId }) {
   }, [providerId]);
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { if (isOpen) load(); }, [isOpen, load]);
+  useEffect(() => { if (isOpen) { setSelected(new Set()); load(); } }, [isOpen, load]);
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e) => { if (e.key === "Escape") setSelected(new Set()); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isOpen]);
 
   // Quota per account, independent so one slow upstream doesn't block the modal
   useEffect(() => {
@@ -185,6 +192,10 @@ export default function KeyAccessModal({ isOpen, onClose, providerId }) {
     if (!key || (key.pinned || UNASSIGNED) === connectionId) return;
     run(() => putPin(keyId, connectionId));
   };
+
+  const toggleKey = (keyId) => setSelected((s) => {
+    const n = new Set(s); n.has(keyId) ? n.delete(keyId) : n.add(keyId); return n;
+  });
 
   const toggleFallback = () => run(async () => {
     const res = await fetch(`/api/providers/${providerId}/key-routing`, {
@@ -242,7 +253,7 @@ export default function KeyAccessModal({ isOpen, onClose, providerId }) {
   const heavyCount = activeKeys.filter((k) => isHeavy(k.id)).length;
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="API key access" size="full">
+    <Modal isOpen={isOpen} onClose={() => { setSelected(new Set()); onClose(); }} title="API key access" size="full">
       <div className="flex flex-wrap items-center gap-3 mb-3">
         <div className="flex-1 min-w-60 text-sm">
           <span className="text-text-muted" title="Team median, last 24h">median <b className="tabular-nums text-text-main">{fmt(teamMedian)}</b></span>
@@ -274,6 +285,10 @@ export default function KeyAccessModal({ isOpen, onClose, providerId }) {
       {data.auto?.everyH && !data.auto?.last && (
         <div className="text-xs text-text-muted mb-2">Auto every {data.auto.everyH}h · first run pending</div>
       )}
+      {selected.size > 0 && (
+        <p className="text-xs text-text-muted mb-2">{selected.size} selected · drag to move · Esc to clear</p>
+      )}
+
       {data.auto?.last && (
         <div className="text-xs text-text-muted mb-2 flex items-center gap-2 tabular-nums">
           <span title={data.auto.last.moves.map((m) => `${keyName(m.keyId)}: ${nameOf(m.from)} → ${nameOf(m.to)}`).join("\n") || "No changes needed"}>
@@ -335,7 +350,16 @@ export default function KeyAccessModal({ isOpen, onClose, providerId }) {
             <div
               key={zone.id || "unassigned"}
               onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => { e.preventDefault(); assign(e.dataTransfer.getData("text/plain"), zone.id); }}
+              onDrop={(e) => {
+                e.preventDefault();
+                let ids; try { ids = JSON.parse(e.dataTransfer.getData("text/plain")); } catch { ids = [e.dataTransfer.getData("text/plain")]; }
+                if (!Array.isArray(ids) || !ids.length) return;
+                if (ids.length === 1) return assign(ids[0], zone.id);
+                const targets = ids.filter((id) => (data.keys.find((k) => k.id === id)?.pinned || UNASSIGNED) !== zone.id);
+                if (!targets.length) return;
+                setSelected(new Set());
+                run(async () => { for (const id of targets) await putPin(id, zone.id); });
+              }}
               className={`rounded-lg border border-dashed p-3 min-h-24 ${low || stranded ? "border-red-500" : "border-border"}`}
             >
               <div className="flex items-baseline gap-1 text-sm font-medium">
@@ -361,9 +385,13 @@ export default function KeyAccessModal({ isOpen, onClose, providerId }) {
                       key={k.id}
                       draggable
                       tabIndex={0}
-                      onDragStart={(e) => e.dataTransfer.setData("text/plain", k.id)}
-                      title={`${k.masked} · ${u?.req || 0} req · $${(u?.cost || 0).toFixed(2)}`}
-                      className={`group rounded-md bg-surface-2 border px-2 py-1 text-sm cursor-grab ${heavy ? "border-orange-500/60" : "border-border"} ${k.isActive ? "" : "opacity-50"}`}
+                      onClick={(e) => { e.stopPropagation(); toggleKey(k.id); }}
+                      onDragStart={(e) => {
+                        const ids = selected.has(k.id) ? [...selected] : [k.id];
+                        e.dataTransfer.setData("text/plain", JSON.stringify(ids));
+                      }}
+                      title={`${k.masked} · ${u?.req || 0} req · $${(u?.cost || 0).toFixed(2)} · click to select, drag to move`}
+                      className={`group rounded-md bg-surface-2 border px-2 py-1 text-sm cursor-grab ${selected.has(k.id) ? "border-primary ring-1 ring-primary/40" : heavy ? "border-orange-500/60" : "border-border"} ${k.isActive ? "" : "opacity-50"}`}
                     >
                       <div className="flex items-center gap-2">
                         <span className="truncate flex-1 min-w-0">{k.name || k.masked}</span>
