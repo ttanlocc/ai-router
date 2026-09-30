@@ -131,5 +131,7 @@ export function configureKeyAutoBalance(settings) {
 export async function setAutoBalanceEvery(providerId, everyH) {
   const state = await saveState(providerId, { everyH: everyH || null });
   configureKeyAutoBalance(await getSettings());
-  return state;
+  // Run once right away on enable so the user sees a result instead of waiting a full interval
+  if (everyH) await runAutoBalance(providerId);
+  return (await getSettings()).keyAutoBalance?.[providerId] || state;
 }

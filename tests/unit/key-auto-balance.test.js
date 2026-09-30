@@ -133,7 +133,12 @@ describe("runAutoBalance / undo / scheduler", () => {
     const patch = (body) => kr.PATCH(new Request("http://x", { method: "PATCH", body: JSON.stringify(body) }), p("openai"));
     expect((await patch({ autoEveryH: 2 })).status).toBe(400);
     expect((await patch({ autoEveryH: "3" })).status).toBe(400);
-    expect((await patch({ autoEveryH: 6 })).status).toBe(200);
+    const on = await patch({ autoEveryH: 6 });
+    expect(on.status).toBe(200);
+    // enabling runs once immediately and returns the run
+    const st = (await on.json()).auto;
+    expect(st.everyH).toBe(6);
+    expect(st.last?.at).toBeTruthy();
     expect((await db.getSettings()).keyAutoBalance.openai.everyH).toBe(6);
     expect((await patch({ autoEveryH: null })).status).toBe(200);
     const post = (id, body) => auto.POST(new Request("http://x", { method: "POST", body: JSON.stringify(body) }), p(id));
