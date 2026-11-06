@@ -102,3 +102,21 @@ export async function setKeyAccounts(apiKeyId, map) {
   });
   return getKeyAccounts(apiKeyId);
 }
+
+// Allowed model names for this key (empty = unrestricted)
+export async function getKeyModels(apiKeyId) {
+  const db = await getAdapter();
+  return db.all(`SELECT model FROM apiKeyModels WHERE apiKeyId = ? ORDER BY model`, [apiKeyId]).map((r) => r.model);
+}
+
+// Replace the allowlist; an empty array removes the restriction
+export async function setKeyModels(apiKeyId, models) {
+  const db = await getAdapter();
+  db.transaction(() => {
+    db.run(`DELETE FROM apiKeyModels WHERE apiKeyId = ?`, [apiKeyId]);
+    for (const model of models || []) {
+      db.run(`INSERT INTO apiKeyModels(apiKeyId, model) VALUES(?, ?)`, [apiKeyId, model]);
+    }
+  });
+  return getKeyModels(apiKeyId);
+}

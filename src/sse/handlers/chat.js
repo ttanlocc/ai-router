@@ -22,7 +22,7 @@ import { handleBypassRequest } from "open-sse/utils/bypassHandler.js";
 import { HTTP_STATUS } from "open-sse/config/runtimeConfig.js";
 import { detectFormatByEndpoint } from "open-sse/translator/formats.js";
 import * as log from "../utils/logger.js";
-import { getKeyAccountScope, keyRejectResponse, pinnedUnavailableResponse } from "../services/keyAccountRouting.js";
+import { getKeyAccountScope, getKeyModelReject, keyRejectResponse, pinnedUnavailableResponse } from "../services/keyAccountRouting.js";
 import { updateProviderCredentials, checkAndRefreshToken } from "../services/tokenRefresh.js";
 import { getProjectIdForConnection } from "open-sse/services/projectId.js";
 import { stripModelContextMarker } from "open-sse/utils/modelMarkers.js";
@@ -86,6 +86,15 @@ export async function handleChat(request, clientRawRequest = null) {
   if (!modelStr) {
     log.warn("CHAT", "Missing model");
     return errorResponse(HTTP_STATUS.BAD_REQUEST, "Missing model");
+  }
+
+  // Per-key model allowlist (checked before bypass/combo so no fake reply leaks for a blocked model)
+  const modelReject = apiKey ? await getKeyModelReject({ apiKey, model: modelStr }) : null;
+  if (modelReject) {
+    log.warn("AUTH", `Model "${modelStr}" blocked by key allowlist`);
+    return new Response(JSON.stringify({ error: { message: modelReject.message, type: "permission_error" } }), {
+      status: modelReject.status, headers: { "Content-Type": "application/json" },
+    });
   }
 
   // Bypass naming/warmup requests before combo rotation to avoid wasting rotation slots
