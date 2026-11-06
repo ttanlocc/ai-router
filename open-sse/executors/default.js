@@ -172,6 +172,18 @@ export class DefaultExecutor extends BaseExecutor {
     } else if (this.provider === "anthropic" && clientBeta) {
       headers["Anthropic-Beta"] = mergeAnthropicBeta(headers["Anthropic-Beta"], clientBeta);
     }
+    // Official api.anthropic.com API-key requests must not carry the Claude Code
+    // beta: Anthropic bills those requests as Claude Code usage and returns
+    // "Your credit balance is too low" (HTTP 400) even when the key has credit.
+    if (this.provider === "anthropic" && headers["Anthropic-Beta"]) {
+      const filtered = headers["Anthropic-Beta"]
+        .split(",")
+        .map(s => s.trim())
+        .filter(f => f && f !== "claude-code-20250219")
+        .join(",");
+      if (filtered) headers["Anthropic-Beta"] = filtered;
+      else delete headers["Anthropic-Beta"];
+    }
 
     // Claude OAuth: align x-claude-code-session-id with metadata.user_id.session_id if missing
     if (this.provider === "claude" && !headers["x-claude-code-session-id"]) {
