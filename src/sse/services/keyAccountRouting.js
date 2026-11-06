@@ -1,4 +1,5 @@
-import { getApiKeyByKey, getKeyAccounts } from "@/lib/localDb";
+import { getApiKeyByKey, getKeyAccounts, getKeyModels } from "@/lib/localDb";
+import { isModelAllowed } from "./keyModelAllowlist.js";
 import { resolveProviderId } from "@/shared/constants/providers.js";
 
 export const PINNED_UNAVAILABLE = "Assigned provider account unavailable";
@@ -50,4 +51,16 @@ export function keyRejectResponse(scope) {
   return new Response(JSON.stringify({ error: { message, type: status === 401 ? "authentication_error" : "permission_error" } }), {
     status, headers: { "Content-Type": "application/json" },
   });
+}
+
+// Model allowlist gate. Returns a reject response object or null (allowed / no allowlist).
+export async function getKeyModelReject({ apiKey, model }) {
+  const key = apiKey ? await getApiKeyByKey(apiKey) : null;
+  if (!key) return null; // auth (if required) already ran in the handler
+  const allowlist = await getKeyModels(key.id);
+  if (isModelAllowed(allowlist, model)) return null;
+  return {
+    status: 403,
+    message: `Model "${model}" is not allowed for this API key`,
+  };
 }

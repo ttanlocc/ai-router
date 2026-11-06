@@ -260,10 +260,22 @@ export default function APIPageClient({ machineId }) {
 
   const openAccountsModal = async (key) => {
     try {
-      const [connRes, accRes] = await Promise.all([fetch("/api/providers"), fetch(`/api/keys/${key.id}/accounts`)]);
+      const [connRes, accRes, modelsRes, modelRes, comboRes] = await Promise.all([
+        fetch("/api/providers"),
+        fetch(`/api/keys/${key.id}/accounts`),
+        fetch(`/api/keys/${key.id}/models`),
+        fetch("/api/models"),
+        fetch("/api/combos"),
+      ]);
       const connections = connRes.ok ? (await connRes.json()).connections || [] : [];
       const accounts = accRes.ok ? (await accRes.json()).accounts || {} : {};
-      setAccountsModal({ key, connections, accounts, error: "" });
+      const models = modelsRes.ok ? (await modelsRes.json()).models || [] : [];
+      // Model names are global: one entry per name, combos listed by their name
+      const names = new Set((modelRes.ok ? (await modelRes.json()).models || [] : []).map((m) => m.model).filter(Boolean));
+      const comboNames = (comboRes.ok ? (await comboRes.json()).combos || [] : []).map((c) => c.name).filter(Boolean);
+      const modelOptions = [...names].sort().map((name) => ({ name, kind: "model" }))
+        .concat(comboNames.sort().map((name) => ({ name, kind: "combo" })));
+      setAccountsModal({ key, connections, accounts, models, modelOptions, error: "" });
     } catch (error) {
       console.log("Error loading key accounts:", error);
     }
@@ -271,12 +283,18 @@ export default function APIPageClient({ machineId }) {
 
   const saveAccountsModal = async () => {
     try {
+      const headers = { "Content-Type": "application/json" };
       const res = await fetch(`/api/keys/${accountsModal.key.id}/accounts`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ accounts: accountsModal.accounts }),
       });
-      if (res.ok) setAccountsModal(null);
+      const modelsRes = res.ok ? await fetch(`/api/keys/${accountsModal.key.id}/models`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ models: accountsModal.models || [] }),
+      }) : null;
+      if (res.ok && modelsRes?.ok) setAccountsModal(null);
       else setAccountsModal((m) => ({ ...m, error: "Failed to save" }));
     } catch (error) {
       console.log("Error saving key accounts:", error);
@@ -1156,6 +1174,36 @@ export default function APIPageClient({ machineId }) {
               </label>
             ))}
             {accountsModal.connections.length === 0 && <p className="text-sm text-text-muted">No provider accounts yet.</p>}
+            <div className="flex flex-col gap-2 border-t border-border pt-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">Allowed models</span>
+                <span className="text-xs text-text-muted">
+                  {(accountsModal.models || []).length === 0 ? "All models allowed" : `${accountsModal.models.length} selected`}
+                </span>
+              </div>
+              <p className="text-xs text-text-muted">
+                Leave all unchecked to allow every model. If any is checked, only checked models and combos can be called with this key. Matching is by model name, across providers.
+              </p>
+              <div className="max-h-56 overflow-y-auto flex flex-col gap-1">
+                {(accountsModal.modelOptions || []).map((opt) => {
+                  const checked = (accountsModal.models || []).includes(opt.name);
+                  return (
+                    <label key={`${opt.kind}:${opt.name}`} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => setAccountsModal((m) => {
+                          const cur = m.models || [];
+                          return { ...m, models: e.target.checked ? [...cur, opt.name] : cur.filter((x) => x !== opt.name) };
+                        })}
+                      />
+                      <span className="font-mono text-xs">{opt.name}</span>
+                      {opt.kind === "combo" && <span className="text-xs text-text-muted">combo</span>}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
             {accountsModal.error && <p className="text-sm text-red-500">{accountsModal.error}</p>}
             <div className="flex gap-2">
               <Button onClick={saveAccountsModal} fullWidth>Save</Button>

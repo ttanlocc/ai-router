@@ -30,7 +30,7 @@ export {
 // API keys
 export {
   getApiKeys, getApiKeyById, createApiKey, updateApiKey, deleteApiKey, validateApiKey,
-  getApiKeyByKey, getKeyAccounts, setKeyAccounts,
+  getApiKeyByKey, getKeyAccounts, setKeyAccounts, getKeyModels, setKeyModels,
 } from "./repos/apiKeysRepo.js";
 
 // Combos
@@ -80,6 +80,7 @@ export async function exportDb() {
     proxyPools: db.all(`SELECT * FROM proxyPools`).map((r) => ({ ...parseJson(r.data, {}), id: r.id, isActive: r.isActive === 1, testStatus: r.testStatus, createdAt: r.createdAt, updatedAt: r.updatedAt })),
     apiKeys: db.all(`SELECT * FROM apiKeys`).map((r) => ({ id: r.id, key: r.key, name: r.name, machineId: r.machineId, isActive: r.isActive === 1, createdAt: r.createdAt })),
     apiKeyAccounts: db.all(`SELECT apiKeyId, provider, connectionId FROM apiKeyAccounts`),
+    apiKeyModels: db.all(`SELECT apiKeyId, model FROM apiKeyModels`),
     combos: db.all(`SELECT * FROM combos`).map((r) => ({ id: r.id, name: r.name, kind: r.kind, models: parseJson(r.models, []), createdAt: r.createdAt, updatedAt: r.updatedAt })),
     modelAliases: {},
     customModels: [],
@@ -108,6 +109,7 @@ export async function importDb(payload) {
     db.run(`DELETE FROM providerNodes`);
     db.run(`DELETE FROM proxyPools`);
     db.run(`DELETE FROM apiKeyAccounts`);
+    db.run(`DELETE FROM apiKeyModels`);
     db.run(`DELETE FROM apiKeys`);
     db.run(`DELETE FROM combos`);
     db.run(`DELETE FROM kv WHERE scope IN ('modelAliases', 'customModels', 'mitmAlias', 'pricing')`);
@@ -149,6 +151,9 @@ export async function importDb(payload) {
         `INSERT OR REPLACE INTO apiKeyAccounts(apiKeyId, provider, connectionId) VALUES(?, ?, ?)`,
         [m.apiKeyId, m.provider, m.connectionId]
       );
+    }
+    for (const m of payload.apiKeyModels || []) {
+      db.run(`INSERT OR REPLACE INTO apiKeyModels(apiKeyId, model) VALUES(?, ?)`, [m.apiKeyId, m.model]);
     }
     for (const c of payload.combos || []) {
       db.run(
