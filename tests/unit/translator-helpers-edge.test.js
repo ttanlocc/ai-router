@@ -9,6 +9,12 @@ describe("normalizeClaudePassthrough — haiku adaptive thinking (docs 11 §1)",
     expect(out.thinking).toEqual({ type: "enabled", budget_tokens: 10000 });
   });
 
+  it("keeps adaptive thinking and effort for haiku 5.x (rejects enabled, accepts adaptive)", () => {
+    const out = normalizeClaudePassthrough({ thinking: { type: "adaptive" }, output_config: { effort: "low" } }, "claude-haiku-5-5");
+    expect(out.thinking).toEqual({ type: "adaptive" });
+    expect(out.output_config).toEqual({ effort: "low" });
+  });
+
   it("keeps adaptive thinking for sonnet/opus", () => {
     const out = normalizeClaudePassthrough({ thinking: { type: "adaptive" } }, "claude-sonnet-4-6");
     expect(out.thinking).toEqual({ type: "adaptive" });
